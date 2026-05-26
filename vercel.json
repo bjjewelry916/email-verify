@@ -6,18 +6,14 @@
       "use": "@vercel/python"
     },
     {
-      "src": "public/**",
+      "src": "public/index.html",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/verify",
-      "dest": "api/verify.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
+      "dest": "/api/verify.py"
     },
     {
       "src": "/",
