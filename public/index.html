@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Galadon Email Verifier</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 40px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    #drop-zone {
+      width: 500px;
+      max-width: 90%;
+      margin: auto;
+      padding: 50px;
+      border: 2px dashed #999;
+      border-radius: 12px;
+      background: white;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    #drop-zone.hover {
+      border-color: black;
+      background: #fafafa;
+    }
+
+    #status {
+      margin-top: 25px;
+      font-size: 15px;
+    }
+
+    .download-btn {
+      margin-top: 20px;
+      display: inline-block;
+      padding: 12px 22px;
+      background: black;
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+    }
+
+    footer {
+      margin-top: 60px;
+      font-size: 13px;
+    }
+
+    footer a {
+      color: black;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>Upload Emails to Verify</h1>
+
+<div id="drop-zone">
+  Drop CSV here or click to upload
+</div>
+
+<input type="file" id="file-input" accept=".csv" hidden />
+
+<div id="status"></div>
+
+<footer>
+  This tool helps you find qualified leads.
+  Now let's get you more sales with
+  <a
+    href="https://www.alxberman.com/mastermind?utm_source=tools&utm_campaign=desktopverifier&utm_medium=footer"
+    target="_blank"
+  >
+    AB Mastermind
+  </a>
+</footer>
+
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const statusDiv = document.getElementById('status');
+
+  dropZone.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('hover');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('hover');
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('hover');
+
+    const file = e.dataTransfer.files[0];
+
+    if (file) {
+      uploadFile(file);
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+
+    if (file) {
+      uploadFile(file);
+    }
+  });
+
+  async function uploadFile(file) {
+    statusDiv.innerHTML = `Uploading ${file.name}...`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/verify', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        statusDiv.innerHTML = `Error: ${text}`;
+        return;
+      }
+
+      const blob = await response.blob();
+
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `verified-${file.name}`;
+      a.className = 'download-btn';
+      a.innerText = 'Download Verified CSV';
+
+      statusDiv.innerHTML = `
+        <p>Verification complete.</p>
+      `;
+
+      statusDiv.appendChild(a);
+
+    } catch (err) {
+      console.error(err);
+      statusDiv.innerHTML = `Something went wrong.`;
+    }
+  }
+</script>
+
+</body>
+</html>
+
