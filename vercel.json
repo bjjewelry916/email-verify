@@ -12,16 +12,16 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/api/verify",
       "dest": "api/verify.py"
     },
     {
       "src": "/(.*)",
-      "dest": "public/$1"
+      "dest": "/public/$1"
     },
     {
       "src": "/",
-      "dest": "public/index.html"
+      "dest": "/public/index.html"
     }
   ]
 }
