@@ -3,153 +3,207 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>bjjewelry Email Verifier</title>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-
+  <title>Advanced Email Verifier</title>
   <style>
-    body {
-      font-family: Arial;
-      background: #f5f5f5;
-      padding: 40px;
-      text-align: center;
-    }
+    body { font-family: sans-serif; text-align: center; margin-top: 40px; background: #f5f5f5; }
+    h1 { color: #333; }
     #drop-zone {
+      border: 2px dashed #999;
+      padding: 50px;
       width: 500px;
       max-width: 90%;
       margin: auto;
-      padding: 50px;
-      border: 2px dashed #999;
+      background: #fff;
+      cursor: pointer;
       border-radius: 12px;
-      background: white;
+      transition: border 0.3s;
+    }
+    #drop-zone.hover { border-color: #000; background: #fafafa; }
+    
+    #jobs { margin-top: 30px; }
+    .job-block {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 15px auto;
+      width: 500px;
+      max-width: 90%;
+      background: #fff;
+      text-align: left;
+      position: relative;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .progress-container {
+      background: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 15px 0 10px 0;
+      height: 20px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: #4caf50;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .status, .log-line, .actions { font-size: 14px; color: #555; }
+    .log-line { font-family: monospace; background: #f4f4f4; padding: 5px; border-radius: 4px; margin-top: 8px;}
+    
+    .actions a {
+      color: #007aff;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-right: 10px;
+    }
+    .close-job {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      font-size: 16px;
+      color: #999;
       cursor: pointer;
     }
-    .download-links a {
-      display: inline-block;
-      margin: 10px;
-      padding: 10px 18px;
-      background: black;
-      color: white;
-      border-radius: 8px;
-      text-decoration: none;
-    }
+    .close-job:hover { color: #000; }
+    .download-links { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;}
   </style>
 </head>
 <body>
 
-<h1>Upload Emails to Verify</h1>
+  <h1>Bulk Email Verifier</h1>
+  <div id="drop-zone">Drop CSV here or click to upload</div>
+  <input type="file" id="file-input" accept=".csv" style="display:none;">
+  
+  <div id="jobs"></div>
 
-<div id="drop-zone">
-  Drop CSV here or click to upload
-</div>
+  <script>
+    // NOTE: Change this to your Railway URL when deploying (e.g. "https://your-domain.up.railway.app")
+    const API_BASE = "https://bjjewelryemailverify-production.up.railway.app"; 
 
-<input type="file" id="file-input" accept=".csv" hidden>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const jobsContainer = document.getElementById('jobs');
 
-<div id="status"></div>
+    let jobList = JSON.parse(localStorage.getItem('verifier-jobs') || '[]');
+    jobList.forEach(({ job_id, fileName }) => createJobBlock(job_id, fileName));
 
-<script>
-const BACKEND_URL = "https://bjjewelryemailverify-production.up.railway.app/verify";
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const statusDiv = document.getElementById('status');
-
-dropZone.onclick = () => fileInput.click();
-
-dropZone.addEventListener('dragover', e => {
-  e.preventDefault();
-});
-
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (file) {
-    uploadFile(file);
-  }
-});
-
-fileInput.addEventListener('change', () => {
-  const file = fileInput.files[0];
-  if (file) {
-    uploadFile(file);
-  }
-});
-
-async function uploadFile(file) {
-  statusDiv.innerHTML = `Uploading and processing ${file.name} (this may take a moment)...`;
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const response = await fetch(BACKEND_URL, {
-      method: 'POST',
-      body: formData
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('hover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('hover');
+      handleFile(e.dataTransfer.files[0]);
+    });
+    
+    fileInput.addEventListener('change', () => {
+        if(fileInput.files[0]) handleFile(fileInput.files[0]);
     });
 
-    if (!response.ok) {
-        throw new Error("Server returned an error");
+    function handleFile(file) {
+      if(!file.name.endsWith('.csv')){
+          alert("Please upload a CSV file.");
+          return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      fetch(`${API_BASE}/verify`, {
+        method: 'POST',
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        if(data.error) {
+            alert(data.error);
+            return;
+        }
+        jobList.push({ job_id: data.job_id, fileName: file.name });
+        localStorage.setItem('verifier-jobs', JSON.stringify(jobList));
+        createJobBlock(data.job_id, file.name);
+      })
+      .catch(err => alert("Failed to connect to the server."));
     }
 
-    const blob = await response.blob();
-    const text = await blob.text();
+    function createJobBlock(job_id, fileName) {
+      const block = document.createElement('div');
+      block.className = 'job-block';
+      block.innerHTML = `
+        <div class="close-job">✖</div>
+        <div style="font-size: 16px;"><strong>${fileName}</strong></div>
+        <div class="progress-container"><div class="progress-bar"></div></div>
+        <div class="status">Initializing...</div>
+        <div class="log-line">Waiting for logs...</div>
+        <div class="actions" style="margin-top: 10px;"><a class="cancel">Cancel Processing</a></div>
+      `;
+      jobsContainer.prepend(block);
 
-    // Safely parse the CSV using PapaParse
-    Papa.parse(text, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function(results) {
-        const dataRows = results.data;
-        
-        const validRows = [];
-        const invalidRows = [];
-        const riskyRows = [];
-        const riskyInvalidRows = [];
+      const bar = block.querySelector('.progress-bar');
+      const status = block.querySelector('.status');
+      const logLine = block.querySelector('.log-line');
+      const cancelBtn = block.querySelector('.cancel');
+      const actions = block.querySelector('.actions');
+      const closeBtn = block.querySelector('.close-job');
 
-        dataRows.forEach(row => {
-          const status = row.status ? row.status.trim() : '';
+      let canceled = false;
 
-          if (status === 'valid') {
-            validRows.push(row);
-          } else if (status === 'invalid') {
-            invalidRows.push(row);
-            riskyInvalidRows.push(row);
-          } else if (status === 'risky') {
-            riskyRows.push(row);
-            riskyInvalidRows.push(row);
-          }
-        });
+      const removeJob = () => {
+        block.remove();
+        jobList = jobList.filter(j => j.job_id !== job_id);
+        localStorage.setItem('verifier-jobs', JSON.stringify(jobList));
+      };
 
-        function createDownload(data, filename) {
-          // Unparse back to CSV safely
-          const csvContent = Papa.unparse(data);
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          return URL.createObjectURL(blob);
-        }
+      cancelBtn.onclick = () => {
+        canceled = true;
+        fetch(`${API_BASE}/cancel?job_id=${job_id}`, { method: 'POST' });
+        status.innerText = `Canceled`;
+        bar.style.background = '#f44336';
+        actions.innerHTML = '';
+      };
 
-        const allUrl = createDownload(dataRows, `all-${file.name}`);
-        const validUrl = createDownload(validRows, `valid-${file.name}`);
-        const invalidUrl = createDownload(invalidRows, `invalid-${file.name}`);
-        const riskyUrl = createDownload(riskyRows, `risky-${file.name}`);
-        const riskyInvalidUrl = createDownload(riskyInvalidRows, `risky-invalid-${file.name}`);
+      closeBtn.onclick = () => {
+        fetch(`${API_BASE}/cancel?job_id=${job_id}`, { method: 'POST' });
+        removeJob();
+      };
 
-        statusDiv.innerHTML = `
-          <h3>Verification Complete</h3>
-          <div class="download-links">
-            <a href="${allUrl}" download="all-${file.name}">Download All</a>
-            <a href="${validUrl}" download="valid-${file.name}">Valid Emails</a>
-            <a href="${invalidUrl}" download="invalid-${file.name}">Invalid Emails</a>
-            <a href="${riskyUrl}" download="risky-${file.name}">Risky Emails</a>
-            <a href="${riskyInvalidUrl}" download="risky-invalid-${file.name}">Risky + Invalid</a>
-          </div>
-        `;
-      }
-    });
+      // Poll Progress
+      const poll = setInterval(() => {
+        if (canceled) return clearInterval(poll);
 
-  } catch(err) {
-    console.error(err);
-    statusDiv.innerHTML = `Something went wrong. Please check your file or try again later.`;
-  }
-}
-</script>
+        fetch(`${API_BASE}/progress?job_id=${job_id}`)
+          .then(res => res.json())
+          .then(data => {
+            bar.style.width = `${data.percent}%`;
+            status.innerText = `${data.percent}% Complete — (Row ${data.row} of ${data.total})`;
+            
+            if (data.percent >= 100 || data.row === data.total) {
+                clearInterval(poll);
+                clearInterval(logPoll);
+                actions.innerHTML = `
+                    <div class="download-links">
+                        <strong style="display:block; margin-bottom:10px;">⬇️ Download Results:</strong>
+                        <a href="${API_BASE}/download?job_id=${job_id}&type=all" target="_blank">All Leads</a> | 
+                        <a href="${API_BASE}/download?job_id=${job_id}&type=valid" target="_blank">Valid Only</a> <br><br>
+                        <a href="${API_BASE}/download?job_id=${job_id}&type=risky" target="_blank">Risky Only</a> | 
+                        <a href="${API_BASE}/download?job_id=${job_id}&type=risky_invalid" target="_blank">Risky & Invalid</a>
+                    </div>
+                `;
+            }
+          }).catch(() => {
+              // Ignore network blips during polling
+          });
+      }, 1000);
+
+      // Poll Logs separately to keep UI responsive
+      const logPoll = setInterval(() => {
+          if(canceled) return clearInterval(logPoll);
+          fetch(`${API_BASE}/log?job_id=${job_id}`)
+            .then(res => res.text())
+            .then(text => {
+                if(text) logLine.innerText = text;
+            });
+      }, 800);
+    }
+  </script>
 </body>
 </html>
