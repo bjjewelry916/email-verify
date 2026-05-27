@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>bjjewelry Email Verifier</title>
+
+  <style>
+
+    body {
+      font-family: Arial;
+      background: #f5f5f5;
+      padding: 40px;
+      text-align: center;
+    }
+
+    #drop-zone {
+      width: 500px;
+      max-width: 90%;
+      margin: auto;
+      padding: 50px;
+      border: 2px dashed #999;
+      border-radius: 12px;
+      background: white;
+      cursor: pointer;
+    }
+
+    .download-links a {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px 18px;
+      background: black;
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<h1>Upload Emails to Verify</h1>
+
+<div id="drop-zone">
+  Drop CSV here or click to upload
+</div>
+
+<input type="file" id="file-input" accept=".csv" hidden>
+
+<div id="status"></div>
+
+<script>
+
+const BACKEND_URL = "https://bjjewelryemailverify-production.up.railway.app/verify";
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const statusDiv = document.getElementById('status');
+
+dropZone.onclick = () => fileInput.click();
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+});
+
+dropZone.addEventListener('drop', e => {
+
+  e.preventDefault();
+
+  const file = e.dataTransfer.files[0];
+
+  if (file) {
+    uploadFile(file);
+  }
+});
+
+fileInput.addEventListener('change', () => {
+
+  const file = fileInput.files[0];
+
+  if (file) {
+    uploadFile(file);
+  }
+});
+
+async function uploadFile(file) {
+
+  statusDiv.innerHTML = `Uploading ${file.name}...`;
+
+  const formData = new FormData();
+
+  formData.append('file', file);
+
+  try {
+
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      body: formData
+    });
+
+    const blob = await response.blob();
+
+    const text = await blob.text();
+
+    const rows = text.trim().split('\n');
+
+    const headers = rows[0];
+
+    const dataRows = rows.slice(1);
+
+    const validRows = [];
+    const invalidRows = [];
+    const riskyRows = [];
+    const riskyInvalidRows = [];
+
+    dataRows.forEach(row => {
+
+      const cols = row.split(',');
+
+      const status = cols[cols.length - 2]?.trim();
+
+      if (status === 'valid') {
+        validRows.push(row);
+      }
+
+      else if (status === 'invalid') {
+        invalidRows.push(row);
+        riskyInvalidRows.push(row);
+      }
+
+      else if (status === 'risky') {
+        riskyRows.push(row);
+        riskyInvalidRows.push(row);
+      }
+    });
+
+    function createDownload(data, filename) {
+
+      const csvContent = [headers, ...data].join('\n');
+
+      const blob = new Blob([csvContent], {
+        type: 'text/csv'
+      });
+
+      return URL.createObjectURL(blob);
+    }
+
+    const allUrl = createDownload(dataRows, `all-${file.name}`);
+
+    const validUrl = createDownload(validRows, `valid-${file.name}`);
+
+    const invalidUrl = createDownload(invalidRows, `invalid-${file.name}`);
+
+    const riskyUrl = createDownload(riskyRows, `risky-${file.name}`);
+
+    const riskyInvalidUrl = createDownload(
+      riskyInvalidRows,
+      `risky-invalid-${file.name}`
+    );
+
+    statusDiv.innerHTML = `
+      <h3>Verification Complete</h3>
+
+      <div class="download-links">
+
+        <a href="${allUrl}" download="all-${file.name}">
+          Download All
+        </a>
+
+        <a href="${validUrl}" download="valid-${file.name}">
+          Valid Emails
+        </a>
+
+        <a href="${invalidUrl}" download="invalid-${file.name}">
+          Invalid Emails
+        </a>
+
+        <a href="${riskyUrl}" download="risky-${file.name}">
+          Risky Emails
+        </a>
+
+        <a href="${riskyInvalidUrl}" download="risky-invalid-${file.name}">
+          Risky + Invalid
+        </a>
+
+      </div>
+    `;
+
+  } catch(err) {
+
+    console.error(err);
+
+    statusDiv.innerHTML = `
+      Something went wrong.
+    `;
+  }
+}
+
+</script>
+
+</body>
+</html>

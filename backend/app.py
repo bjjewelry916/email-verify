@@ -1,7 +1,10 @@
 import csv
 import io
 import re
+import smtplib
+import socket
 import dns.resolver
+
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
@@ -25,6 +28,7 @@ ROLE_BASED_PREFIXES = {
 }
 
 def check_email(email):
+
     if not EMAIL_REGEX.match(email):
         return "invalid", "bad_syntax"
 
@@ -38,13 +42,43 @@ def check_email(email):
         return "invalid", "role_based"
 
     try:
-        dns.resolver.resolve(domain, 'MX')
-        return "valid", "mx_found"
+        records = dns.resolver.resolve(domain, 'MX')
+        mx_record = str(records[0].exchange)
+
     except Exception:
         return "invalid", "no_mx"
 
-@app.route('/api/verify', methods=['POST'])
+    try:
+        server = smtplib.SMTP(timeout=5)
+
+        server.connect(mx_record)
+
+        server.helo("example.com")
+
+        server.mail("verify@example.com")
+
+        code, _ = server.rcpt(email)
+
+        server.quit()
+
+        if code == 250:
+            return "valid", "smtp_ok"
+
+        elif code == 550:
+            return "invalid", "smtp_reject"
+
+        else:
+            return "risky", f"smtp_{code}"
+
+    except socket.timeout:
+        return "risky", "timeout"
+
+    except Exception:
+        return "risky", "smtp_error"
+
+@app.route('/verify', methods=['POST'])
 def verify():
+
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -55,6 +89,7 @@ def verify():
 
     try:
         content = file.read().decode('utf-8', errors='ignore')
+
     except Exception:
         return jsonify({"error": "Could not read CSV"}), 400
 
@@ -76,13 +111,16 @@ def verify():
     fieldnames = list(reader[0].keys()) + ['status', 'reason']
 
     writer = csv.DictWriter(output, fieldnames=fieldnames)
+
     writer.writeheader()
 
     for row in reader:
+
         email = (row.get(email_field) or '').strip()
 
         if not email:
             status, reason = "invalid", "empty_email"
+
         else:
             status, reason = check_email(email)
 
@@ -102,6 +140,12 @@ def verify():
     )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+
+    import os
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000))
+    )
 
     
