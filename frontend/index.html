@@ -3,18 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <title>bjjewelry Email Verifier</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
   <style>
-
     body {
       font-family: Arial;
       background: #f5f5f5;
       padding: 40px;
       text-align: center;
     }
-
     #drop-zone {
       width: 500px;
       max-width: 90%;
@@ -25,7 +24,6 @@
       background: white;
       cursor: pointer;
     }
-
     .download-links a {
       display: inline-block;
       margin: 10px;
@@ -35,10 +33,8 @@
       border-radius: 8px;
       text-decoration: none;
     }
-
   </style>
 </head>
-
 <body>
 
 <h1>Upload Emails to Verify</h1>
@@ -52,7 +48,6 @@
 <div id="status"></div>
 
 <script>
-
 const BACKEND_URL = "https://bjjewelryemailverify-production.up.railway.app/verify";
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
@@ -65,139 +60,96 @@ dropZone.addEventListener('dragover', e => {
 });
 
 dropZone.addEventListener('drop', e => {
-
   e.preventDefault();
-
   const file = e.dataTransfer.files[0];
-
   if (file) {
     uploadFile(file);
   }
 });
 
 fileInput.addEventListener('change', () => {
-
   const file = fileInput.files[0];
-
   if (file) {
     uploadFile(file);
   }
 });
 
 async function uploadFile(file) {
-
-  statusDiv.innerHTML = `Uploading ${file.name}...`;
+  statusDiv.innerHTML = `Uploading and processing ${file.name} (this may take a moment)...`;
 
   const formData = new FormData();
-
   formData.append('file', file);
 
   try {
-
     const response = await fetch(BACKEND_URL, {
       method: 'POST',
       body: formData
     });
 
-    const blob = await response.blob();
+    if (!response.ok) {
+        throw new Error("Server returned an error");
+    }
 
+    const blob = await response.blob();
     const text = await blob.text();
 
-    const rows = text.trim().split('\n');
+    // Safely parse the CSV using PapaParse
+    Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        const dataRows = results.data;
+        
+        const validRows = [];
+        const invalidRows = [];
+        const riskyRows = [];
+        const riskyInvalidRows = [];
 
-    const headers = rows[0];
+        dataRows.forEach(row => {
+          const status = row.status ? row.status.trim() : '';
 
-    const dataRows = rows.slice(1);
+          if (status === 'valid') {
+            validRows.push(row);
+          } else if (status === 'invalid') {
+            invalidRows.push(row);
+            riskyInvalidRows.push(row);
+          } else if (status === 'risky') {
+            riskyRows.push(row);
+            riskyInvalidRows.push(row);
+          }
+        });
 
-    const validRows = [];
-    const invalidRows = [];
-    const riskyRows = [];
-    const riskyInvalidRows = [];
+        function createDownload(data, filename) {
+          // Unparse back to CSV safely
+          const csvContent = Papa.unparse(data);
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          return URL.createObjectURL(blob);
+        }
 
-    dataRows.forEach(row => {
+        const allUrl = createDownload(dataRows, `all-${file.name}`);
+        const validUrl = createDownload(validRows, `valid-${file.name}`);
+        const invalidUrl = createDownload(invalidRows, `invalid-${file.name}`);
+        const riskyUrl = createDownload(riskyRows, `risky-${file.name}`);
+        const riskyInvalidUrl = createDownload(riskyInvalidRows, `risky-invalid-${file.name}`);
 
-      const cols = row.split(',');
-
-      const status = cols[cols.length - 2]?.trim();
-
-      if (status === 'valid') {
-        validRows.push(row);
-      }
-
-      else if (status === 'invalid') {
-        invalidRows.push(row);
-        riskyInvalidRows.push(row);
-      }
-
-      else if (status === 'risky') {
-        riskyRows.push(row);
-        riskyInvalidRows.push(row);
+        statusDiv.innerHTML = `
+          <h3>Verification Complete</h3>
+          <div class="download-links">
+            <a href="${allUrl}" download="all-${file.name}">Download All</a>
+            <a href="${validUrl}" download="valid-${file.name}">Valid Emails</a>
+            <a href="${invalidUrl}" download="invalid-${file.name}">Invalid Emails</a>
+            <a href="${riskyUrl}" download="risky-${file.name}">Risky Emails</a>
+            <a href="${riskyInvalidUrl}" download="risky-invalid-${file.name}">Risky + Invalid</a>
+          </div>
+        `;
       }
     });
 
-    function createDownload(data, filename) {
-
-      const csvContent = [headers, ...data].join('\n');
-
-      const blob = new Blob([csvContent], {
-        type: 'text/csv'
-      });
-
-      return URL.createObjectURL(blob);
-    }
-
-    const allUrl = createDownload(dataRows, `all-${file.name}`);
-
-    const validUrl = createDownload(validRows, `valid-${file.name}`);
-
-    const invalidUrl = createDownload(invalidRows, `invalid-${file.name}`);
-
-    const riskyUrl = createDownload(riskyRows, `risky-${file.name}`);
-
-    const riskyInvalidUrl = createDownload(
-      riskyInvalidRows,
-      `risky-invalid-${file.name}`
-    );
-
-    statusDiv.innerHTML = `
-      <h3>Verification Complete</h3>
-
-      <div class="download-links">
-
-        <a href="${allUrl}" download="all-${file.name}">
-          Download All
-        </a>
-
-        <a href="${validUrl}" download="valid-${file.name}">
-          Valid Emails
-        </a>
-
-        <a href="${invalidUrl}" download="invalid-${file.name}">
-          Invalid Emails
-        </a>
-
-        <a href="${riskyUrl}" download="risky-${file.name}">
-          Risky Emails
-        </a>
-
-        <a href="${riskyInvalidUrl}" download="risky-invalid-${file.name}">
-          Risky + Invalid
-        </a>
-
-      </div>
-    `;
-
   } catch(err) {
-
     console.error(err);
-
-    statusDiv.innerHTML = `
-      Something went wrong.
-    `;
+    statusDiv.innerHTML = `Something went wrong. Please check your file or try again later.`;
   }
 }
-
 </script>
-
 </body>
 </html>
