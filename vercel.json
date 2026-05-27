@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/verify.py",
+      "src": "api/verify-app.py",
       "use": "@vercel/python"
     },
     {
@@ -13,7 +13,7 @@
   "routes": [
     {
       "src": "/api/verify",
-      "dest": "/api/verify.py"
+      "dest": "/api/verify-app.py"
     },
     {
       "src": "/",
