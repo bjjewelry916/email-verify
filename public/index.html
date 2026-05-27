@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bjjewelry Email Verifier</title>
+  <title>Galadon Email Verifier</title>
 
   <style>
     body {
@@ -40,14 +40,19 @@
       font-size: 15px;
     }
 
-    .download-btn {
+    .download-links {
       margin-top: 20px;
+    }
+
+    .download-links a {
       display: inline-block;
-      padding: 12px 22px;
+      margin: 8px;
+      padding: 10px 18px;
       background: black;
       color: white;
       border-radius: 8px;
       text-decoration: none;
+      font-size: 14px;
     }
 
     footer {
@@ -72,6 +77,17 @@
 <input type="file" id="file-input" accept=".csv" hidden />
 
 <div id="status"></div>
+
+<footer>
+  This tool helps you find qualified leads.
+  Now let's get you more sales with
+  <a
+    href="https://www.alxberman.com/mastermind?utm_source=tools&utm_campaign=desktopverifier&utm_medium=footer"
+    target="_blank"
+  >
+    AB Mastermind
+  </a>
+</footer>
 
 <script>
   const dropZone = document.getElementById('drop-zone');
@@ -130,19 +146,66 @@
 
       const blob = await response.blob();
 
-      const url = window.URL.createObjectURL(blob);
+      const text = await blob.text();
 
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `verified-${file.name}`;
-      a.className = 'download-btn';
-      a.innerText = 'Download Verified CSV';
+      const rows = text.trim().split('\n');
+      const headers = rows[0];
+      const dataRows = rows.slice(1);
+
+      const validRows = [];
+      const invalidRows = [];
+      const riskyRows = [];
+      const riskyInvalidRows = [];
+
+      dataRows.forEach(row => {
+        if (row.includes(',valid,')) {
+          validRows.push(row);
+        } else if (row.includes(',invalid,')) {
+          invalidRows.push(row);
+          riskyInvalidRows.push(row);
+        } else if (row.includes(',risky,')) {
+          riskyRows.push(row);
+          riskyInvalidRows.push(row);
+        }
+      });
+
+      function createDownload(data, filename) {
+        const csvContent = [headers, ...data].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        return URL.createObjectURL(blob);
+      }
+
+      const allUrl = createDownload(dataRows, `all-${file.name}`);
+      const validUrl = createDownload(validRows, `valid-${file.name}`);
+      const invalidUrl = createDownload(invalidRows, `invalid-${file.name}`);
+      const riskyUrl = createDownload(riskyRows, `risky-${file.name}`);
+      const riskyInvalidUrl = createDownload(riskyInvalidRows, `risky-invalid-${file.name}`);
 
       statusDiv.innerHTML = `
         <p>Verification complete.</p>
-      `;
 
-      statusDiv.appendChild(a);
+        <div class="download-links">
+          <a href="${allUrl}" download="all-${file.name}">
+            Download All
+          </a>
+
+          <a href="${validUrl}" download="valid-${file.name}">
+            Valid Emails
+          </a>
+
+          <a href="${invalidUrl}" download="invalid-${file.name}">
+            Invalid Emails
+          </a>
+
+          <a href="${riskyUrl}" download="risky-${file.name}">
+            Risky Emails
+          </a>
+
+          <a href="${riskyInvalidUrl}" download="risky-invalid-${file.name}">
+            Risky + Invalid
+          </a>
+        </div>
+      `;
 
     } catch (err) {
       console.error(err);
@@ -153,4 +216,3 @@
 
 </body>
 </html>
-
