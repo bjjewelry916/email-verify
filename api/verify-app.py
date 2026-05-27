@@ -2,7 +2,6 @@ import csv
 import io
 import re
 import dns.resolver
-import smtplib
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
@@ -10,11 +9,13 @@ app = Flask(__name__)
 CORS(app)
 
 EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
+
 DISPOSABLE_DOMAINS = {
     "mailinator.com",
     "10minutemail.com",
     "guerrillamail.com"
 }
+
 ROLE_BASED_PREFIXES = {
     "info",
     "support",
@@ -37,42 +38,10 @@ def check_email(email):
         return "invalid", "role_based"
 
     try:
-        records = dns.resolver.resolve(domain, 'MX')
-        mx_record = str(records[0].exchange)
+        dns.resolver.resolve(domain, 'MX')
+        return "valid", "mx_found"
     except Exception:
         return "invalid", "no_mx"
-
-    try:
-        server = smtplib.SMTP(timeout=10)
-        server.connect(mx_record)
-        server.helo("example.com")
-        server.mail("probe@example.com")
-        code, _ = server.rcpt(f"doesnotexist123@{domain}")
-        server.quit()
-
-        if code == 250:
-            return "risky", "domain_accepts_all"
-
-    except Exception:
-        pass
-
-    try:
-        server = smtplib.SMTP(timeout=10)
-        server.connect(mx_record)
-        server.helo("example.com")
-        server.mail("verifier@example.com")
-        code, _ = server.rcpt(email)
-        server.quit()
-
-    except Exception:
-        return "risky", "smtp_timeout"
-
-    if code == 250:
-        return "valid", "smtp_ok"
-    elif code == 550:
-        return "invalid", "smtp_reject"
-    else:
-        return "risky", f"smtp_{code}"
 
 @app.route('/api/verify', methods=['POST'])
 def verify():
@@ -109,13 +78,11 @@ def verify():
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
-    results = []
-
     for row in reader:
         email = (row.get(email_field) or '').strip()
 
         if not email:
-            status, reason = 'invalid', 'empty_email'
+            status, reason = "invalid", "empty_email"
         else:
             status, reason = check_email(email)
 
@@ -123,12 +90,6 @@ def verify():
         row['reason'] = reason
 
         writer.writerow(row)
-
-        results.append({
-            "email": email,
-            "status": status,
-            "reason": reason
-        })
 
     output.seek(0)
 
